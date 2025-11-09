@@ -1,98 +1,61 @@
 # W10 — Reflect: Standard ACLs & Wildcard Masks
 
 **Week:** W10  
-**Date:** {date}  
-**Student:** {your_name}  
+**Date:** 2025-11-09
+**Student:** Allison "AJ" Buffam
 **Ops-only policy:** Use operational commands (device prompt + command). No `show running-config`. Packet Tracer friendly outputs.
-
----
-
-## Always True Rules (write in your own words)
-
-### Always Rule 1 — Standard ACLs check source only
-**Rule (one line):** A **standard ACL** matches packets **only on source addresses**, never on destinations.
-
-**In my words (1–2 sentences):**  
-Even if traffic is destined for a protected network, ACL logic only looks at the **source IP** to decide permit or deny. This is why spoof prevention relies on blocking fake source addresses, not destination ones.
-
-**Proof lines (pick two):**
-- `CORE# show access-lists PROTECT-PC`
-- `CORE# show ip interface g0/0/0 | include access list`
-
-**If this breaks next week, first move:**  
-Check whether your ACL logic is placed close to the source; verify the ACL type (standard vs extended).
-
----
-
-### Always Rule 2 — ACLs process top-down, first-match wins
-**Rule (one line):** ACLs read from the top and stop at the first match — later lines are ignored once a decision is made.
-
-**Proof lines (pick two):**
-- `CORE# show access-lists PROTECT-PC`
-- `EDGE# ping 198.18.U.130 source 203.0.113.U`
-
-**If this breaks next week, first move:**  
-Reorder or insert ACL entries logically — deny conditions before general permits.
-
----
-
-### Always Rule 3 — Implicit deny is always last
-**Rule (one line):** Every ACL ends with an **invisible deny all**, even if you don’t type it.
-
-**Proof lines (pick two):**
-- `CORE# show access-lists PROTECT-PC` → hit counters for deny and permit lines  
-- `EDGE# ping 198.18.U.130 source 198.18.U.129` (expect drop)
-
-**If this breaks next week, first move:**  
-Explicitly add `permit any` at the end if needed for testing or gradual policy rollout.
-
----
-
-## Create Micro-Cards (CER)
-> **Claim → Evidence → Reasoning**
-
-**CER 1 — Spoofed source blocked**  
-- **Claim:** Packets spoofing a PC address were denied at CORE.  
-- **Evidence:** `CORE# show access-lists PROTECT-PC` → `deny 198.18.U.128 0.0.0.63 (3 matches)`  
-- **Reasoning:** ACL successfully stopped packets pretending to originate from the protected PC subnet.
-
-**CER 2 — Legit traffic allowed**  
-- **Claim:** External or VM-sourced packets were permitted to the PC subnet.  
-- **Evidence:** `CORE# show access-lists PROTECT-PC` → `permit any (5 matches)`  
-- **Reasoning:** The ACL logic allowed valid packets while maintaining anti-spoofing protection.
-
-**CER 3 — ACL order confirmed**  
-- **Claim:** Moving a `deny` line above a `permit` changed outcomes as expected.  
-- **Evidence:** Before/after `show access-lists` hit counters differ by sequence.  
-- **Reasoning:** Confirms the “first-match wins” processing order of ACLs.
-
----
-
-## Ops Lexicon — New This Week
-- **Wildcard mask:** A binary pattern used to define which bits in an IP address are checked (0 = must match, 1 = ignore).  
-- **Standard ACL:** Access control list that filters traffic by **source IP only**.  
-- **Extended ACL:** ACL that filters by **source + destination + protocol + port**.  
-- **Implicit deny:** The unseen final rule that drops all packets not previously permitted.  
-- **Anti-spoofing:** Security technique using ACLs to block packets claiming to originate from internal subnets when they arrive from external links.  
-- **Access-group:** Command used to bind an ACL to an interface in a specific direction (`in` or `out`).
-
----
 
 ## Reflect Questions
 
-1) Why does the “Protect PC Network” ACL inspect **source** instead of **destination** addresses? 
-2) What would happen if the ACL were applied **outbound** on EDGE instead of **inbound** on CORE?  
+1) Why does the “Protect PC Network” ACL inspect **source** instead of **destination** addresses?
+
+The ACL is basically a gatekeeper, super good at checking who's trying to send traffic the way of the router. It doesn't really care where it's headed, it just wants to make sure that the only trusted sources are allowed through. Kind of like a club bouncer, like this guy down below. If he sees someone he doesn't trust or recognize, he won't let them in and just blocks the door. 
+
+![[accurate-acl-interpretation.jpg]]
+
+2) What would happen if the ACL were applied **outbound** on EDGE instead of **inbound** on CORE?
+
+Relating back to the image above, we'll use the left side as the EDGE outbound ACL and the right side as the CORE inbound ACL. 
+
+Left side, EDGE outbound: dude is blocking the wrong side of the door, he only stops things leaving the building. Bad traffic already walked through the network, and now the guard is like "you're not allowed to leave" DESPITE already being let in. It's inefficient.
+
+Right side, CORE inbound:
+
+Dude will open the door for only the approved guests coming in, so no unwanted packets will even step foot inside the network (or club). It's smart protection.
+
 3) Show two `show access-lists` lines proving both a permit and a deny match occurred.  
+
+From BUFF0039-CORE: `show ip access-lists PROTECT-PC`
+
+```SQL
+Standard IP access list PROTECT-PC
+    10 deny   198.18.116.128 0.0.0.63 log (10 matches)
+    20 permit any (58 matches)
+```
+
+So, `10 deny` blocked 10 packets from my PC + Mgmt subnet `(198.18.116.128/26)` blocked it ten times, showing that the deny statement worked as intended. Then, my `20 permit` allowed 58 packets to flow through, showing that communication wasn't interrupted. Together, they demonstrated that the Protect-PC ACL filtered traffic successfully, allowing packets through the door but then blocking the restricted ones. 
+
 4) What part of ACL behaviour confirms the “first-match wins” rule?  
+
+From how I understand it, the "first-match wins" rule works like the bouncer reading the list from the top to the bottom. If he sees your name on the list, he stops reading (even if it says permit or deny). He doesn't need to keep reading, because he's already determined whether you're in or out. That's why the order matters so much in ACLs.
+
 5) Describe one improvement you made to your ACL order or mask logic during testing.
 
----
+Not so much of an ACL issue, but more of a "I forgot to disable the firewall and only realized after an hour like a clown 🤡". However, I realized while doing the quiz that I probably messed up with the addressing because you're supposed to start with the network and then account for how many addresses you need to block. Eventually after tweaking (and turning the firewall off), I was able to get the results I wanted, with the ACL working as how I believe you wanted it to. 
 
+---
 ## Time & Confidence
-- **Time spent (hh:mm):** ________  
-- **Confidence (0–5):** ________ (0 = lost, 5 = I could teach it)
+
+- **Time spent (hh:mm):** 8:00
+- **Confidence (0–5):** 3 
+
+I understand some of it, but I am unsure if I'm getting it right! :D 
 
 ---
-
 ## Appendix — Your best one-liner
-Paste your best ops verification line proving ACL logic worked
+
+```sql
+BUFF0039-CORE# show access-lists PROTECT-PC | include matches
+    10 deny   198.18.116.128 0.0.0.63 log (10 matches)
+    20 permit any (58 matches)
+```
